@@ -1,12 +1,12 @@
 {
-    "name": "mio_clock",
-    "short_name": "mio_clock",
+    "name": "ミオと百年時計",
+    "short_name": "百年時計",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "background_color": "#071B27",
+    "theme_color": "#071B27",
+    "description": "百年前の少女と、同じ部屋で謎を解く脱出ゲーム。",
+    "orientation": "landscape",
     "prefer_related_applications": false,
     "icons": [
         {

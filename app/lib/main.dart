@@ -6,8 +6,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'game_progress.dart';
 import 'game_room.dart';
+import 'widgets/ending_screen.dart';
 
 const _saveKey = 'mio100.flutter.prototype.v1';
+const _endingsKey = 'mio100.endings.v1';
+const _soundKey = 'mio100.sound.v1';
+
+enum _AppScreen { title, game, ending }
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -31,7 +36,10 @@ class MioApp extends StatefulWidget {
 
 class _MioAppState extends State<MioApp> {
   late GameProgress _progress;
-  bool _playing = false;
+  late Set<String> _endings;
+  late bool _soundOn;
+  _AppScreen _screen = _AppScreen.title;
+  String? _endingKind;
 
   @override
   void initState() {
@@ -39,6 +47,8 @@ class _MioAppState extends State<MioApp> {
     _progress = GameProgress.fromJson(
       widget.preferences.getString(_saveKey) ?? '',
     );
+    _endings = widget.preferences.getStringList(_endingsKey)?.toSet() ?? {};
+    _soundOn = widget.preferences.getBool(_soundKey) ?? true;
   }
 
   void _save(GameProgress progress) {
@@ -48,9 +58,40 @@ class _MioAppState extends State<MioApp> {
   void _start() {
     setState(() {
       _progress = GameProgress();
-      _playing = true;
+      _screen = _AppScreen.game;
     });
     _save(_progress);
+  }
+
+  void _doorShortcut() {
+    setState(() {
+      _progress = GameProgress.readyAtDoor();
+      _screen = _AppScreen.game;
+    });
+    _save(_progress);
+  }
+
+  void _completeEnding(String kind) {
+    setState(() {
+      _endings.add(kind);
+      _endingKind = kind;
+      _screen = _AppScreen.ending;
+    });
+    unawaited(widget.preferences.setStringList(_endingsKey, _endings.toList()));
+    unawaited(widget.preferences.remove(_saveKey));
+  }
+
+  void _finishEnding() {
+    setState(() {
+      _progress = GameProgress();
+      _screen = _AppScreen.title;
+      _endingKind = null;
+    });
+  }
+
+  void _setSound(bool enabled) {
+    setState(() => _soundOn = enabled);
+    unawaited(widget.preferences.setBool(_soundKey, enabled));
   }
 
   @override
@@ -67,17 +108,31 @@ class _MioAppState extends State<MioApp> {
             child: SizedBox(
               width: 1280,
               height: 720,
-              child: _playing
-                  ? GameRoom(
-                      progress: _progress,
-                      onSave: _save,
-                      onTitle: () => setState(() => _playing = false),
-                    )
-                  : _TitleScreen(
-                      hasSave: _progress.hasProgress,
-                      onStart: _start,
-                      onContinue: () => setState(() => _playing = true),
-                    ),
+              child: switch (_screen) {
+                _AppScreen.game => GameRoom(
+                  progress: _progress,
+                  endings: _endings,
+                  soundOn: _soundOn,
+                  onSoundChanged: _setSound,
+                  onSave: _save,
+                  onTitle: () => setState(() => _screen = _AppScreen.title),
+                  onRestart: _start,
+                  onEnding: _completeEnding,
+                ),
+                _AppScreen.ending => EndingScreen(
+                  key: ValueKey(_endingKind),
+                  kind: _endingKind!,
+                  soundOn: _soundOn,
+                  onFinish: _finishEnding,
+                ),
+                _AppScreen.title => _TitleScreen(
+                  hasSave: _progress.hasProgress,
+                  endings: _endings,
+                  onStart: _start,
+                  onContinue: () => setState(() => _screen = _AppScreen.game),
+                  onDoor: _doorShortcut,
+                ),
+              },
             ),
           ),
         ),
@@ -89,20 +144,29 @@ class _MioAppState extends State<MioApp> {
 class _TitleScreen extends StatelessWidget {
   const _TitleScreen({
     required this.hasSave,
+    required this.endings,
     required this.onStart,
     required this.onContinue,
+    required this.onDoor,
   });
 
   final bool hasSave;
+  final Set<String> endings;
   final VoidCallback onStart;
   final VoidCallback onContinue;
+  final VoidCallback onDoor;
 
   @override
   Widget build(BuildContext context) {
     return Stack(
       fit: StackFit.expand,
       children: [
-        Image.asset('assets/images/room_2126.png', fit: BoxFit.fill),
+        Image.asset(
+          'assets/images/room_2126.png',
+          fit: BoxFit.fill,
+          errorBuilder: (_, error, stack) =>
+              Container(color: const Color(0xFF10222C)),
+        ),
         const DecoratedBox(
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -166,19 +230,54 @@ class _TitleScreen extends StatelessWidget {
                   ],
                 ],
               ),
+              if (endings.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                OutlinedButton.icon(
+                  onPressed: onDoor,
+                  icon: const Icon(Icons.door_front_door_outlined),
+                  label: const Text('扉の前から'),
+                  style: _buttonStyle(),
+                ),
+              ],
             ],
           ),
         ),
-        const Positioned(
-          right: 34,
+        Positioned(
+          left: 100,
           bottom: 25,
-          child: Text(
-            'FLUTTER PROTOTYPE  ·  謎1「カレンダーの丸」',
+          child: const Text(
+            '音あり推奨  ·  ヘッドホンで時の旋律を',
             style: TextStyle(
               color: Color(0xFFB5C6CD),
-              fontSize: 15,
+              fontSize: 16,
               letterSpacing: 2,
             ),
+          ),
+        ),
+        Positioned(
+          right: 34,
+          bottom: 25,
+          child: Row(
+            children: [
+              if (endings.contains('normal'))
+                const Text(
+                  '☾ またね  ',
+                  style: TextStyle(color: Color(0xFFD7C4A5), fontSize: 19),
+                ),
+              if (endings.contains('true'))
+                const Text(
+                  '☀ おかえり  ',
+                  style: TextStyle(color: Color(0xFFE8BF79), fontSize: 19),
+                ),
+              const Text(
+                'ESCAPE GAME',
+                style: TextStyle(
+                  color: Color(0xFFB5C6CD),
+                  fontSize: 15,
+                  letterSpacing: 2,
+                ),
+              ),
+            ],
           ),
         ),
       ],
