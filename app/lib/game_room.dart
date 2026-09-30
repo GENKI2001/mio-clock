@@ -288,7 +288,7 @@ class _GameRoomState extends State<GameRoom> {
         ),
         if (_message != null)
           Positioned(
-            left: 218,
+            left: 375,
             right: 165,
             bottom: 21,
             child: GestureDetector(
