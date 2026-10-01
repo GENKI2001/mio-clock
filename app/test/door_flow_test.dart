@@ -113,8 +113,10 @@ void main() {
     expect(progress.flag('watchPromised'), isTrue);
   });
 
-  testWidgets('ヒントの答えは確認を経て表示される', (tester) async {
+  testWidgets('ヒントは広告を見るたびに一段ずつ開き、見なければ開かない', (tester) async {
     final progress = GameProgress.readyAtDoor();
+    var watched = true;
+    var ads = 0;
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -127,22 +129,34 @@ void main() {
             onTitle: () {},
             onRestart: () {},
             onEnding: (_) {},
+            rewardGate: () async {
+              ads++;
+              return watched;
+            },
           ),
         ),
       ),
     );
     await tester.tap(find.text('ヒント'));
     await tester.pump();
-    expect(progress.hintLevel['s6'], 1);
-    await tester.tap(find.text('もう一段階見る'));
+    expect(progress.hintLevel['s6'] ?? 0, 0, reason: '開いただけでは見えない');
+    for (var level = 1; level <= 3; level++) {
+      await tester.tap(find.byKey(const Key('hint-watch')));
+      await tester.pumpAndSettle();
+      expect(progress.hintLevel['s6'], level);
+    }
+    expect(find.byKey(const Key('hint-watch')), findsNothing);
+    expect(ads, 3);
+
+    progress.hintLevel.clear();
+    watched = false;
+    await tester.tap(find.byIcon(Icons.close).first);
     await tester.pump();
-    expect(progress.hintLevel['s6'], 2);
-    await tester.tap(find.text('もう一段階見る'));
+    await tester.tap(find.text('ヒント'));
     await tester.pump();
-    expect(progress.hintLevel['s6'], 2);
-    expect(find.text('次は答えを表示します。見ますか?'), findsOneWidget);
-    await tester.tap(find.text('答えを見る'));
-    await tester.pump();
-    expect(progress.hintLevel['s6'], 3);
+    await tester.tap(find.byKey(const Key('hint-watch')));
+    await tester.pumpAndSettle();
+    expect(progress.hintLevel['s6'] ?? 0, 0);
+    expect(find.textContaining('ヒントは開きませんでした'), findsOneWidget);
   });
 }

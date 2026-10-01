@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import 'ads.dart';
 import 'data/hotspots.dart';
 import 'data/mio_voice.dart';
 import 'data/story_text.dart';
@@ -44,6 +45,7 @@ class GameRoom extends StatefulWidget {
     required this.onTitle,
     required this.onRestart,
     required this.onEnding,
+    this.rewardGate,
   });
 
   final GameProgress progress;
@@ -54,6 +56,10 @@ class GameRoom extends StatefulWidget {
   final VoidCallback onTitle;
   final VoidCallback onRestart;
   final ValueChanged<String> onEnding;
+
+  /// Plays a rewarded ad and reports whether it was watched through. Tests
+  /// pass their own; the app uses AdMob.
+  final Future<bool> Function()? rewardGate;
 
   @override
   State<GameRoom> createState() => _GameRoomState();
@@ -81,7 +87,8 @@ class _GameRoomState extends State<GameRoom> {
   final List<int> _drawerDigits = [0, 0, 0];
   final List<int> _boxDigits = [0, 0, 0, 0];
   final List<int> _baseDigits = [0, 0, 0];
-  bool _confirmHint = false;
+  bool _hintLoading = false;
+  String? _hintMessage;
   bool _confirmReset = false;
   bool _largeText = false;
   bool _soundOn = true;
@@ -222,7 +229,6 @@ class _GameRoomState extends State<GameRoom> {
   void _closePanel() {
     setState(() {
       _panel = null;
-      _confirmHint = false;
       _confirmReset = false;
     });
   }
@@ -1176,26 +1182,31 @@ class _GameRoomState extends State<GameRoom> {
   }
 
   void _showHint() {
-    final stage = _progress.currentStage(widget.endings);
-    if ((_progress.hintLevel[stage] ?? 0) == 0) {
-      _progress.revealHint(stage);
-      _persist();
-    }
     setState(() {
-      _confirmHint = false;
+      _hintMessage = null;
       _panel = _Panel.hint;
     });
   }
 
-  void _moreHint() {
-    final stage = _progress.currentStage(widget.endings);
-    if ((_progress.hintLevel[stage] ?? 0) == 2 && !_confirmHint) {
-      setState(() => _confirmHint = true);
-      return;
-    }
+  /// A rewarded ad unlocks the next hint. The game falls silent while it
+  /// plays and picks the sound back up afterwards.
+  Future<void> _watchForHint() async {
+    if (_hintLoading) return;
     setState(() {
-      _progress.revealHint(stage);
-      _confirmHint = false;
+      _hintLoading = true;
+      _hintMessage = null;
+    });
+    _audio.setEnabled(false);
+    final earned = await (widget.rewardGate ?? HintAds.instance.watchForHint)();
+    if (!mounted) return;
+    _audio.setEnabled(_soundOn);
+    setState(() {
+      _hintLoading = false;
+      if (earned) {
+        _progress.revealHint(_progress.currentStage(widget.endings));
+      } else {
+        _hintMessage = '広告を最後まで見られなかったため、ヒントは開きませんでした。通信環境を確かめて、もう一度お試しください。';
+      }
     });
     _persist();
   }
@@ -1280,7 +1291,8 @@ class _GameRoomState extends State<GameRoom> {
         ),
         _header(),
         if (!_past && _progress.metMio) _inventory(),
-        _watchButton(),
+        // Once fitted into the door, the watch is no longer in hand.
+        if (!_doorWatchIn) _watchButton(),
         if ((_focus != null || _scene != null) &&
             _panel == null &&
             _dialogue.isEmpty)
@@ -2018,10 +2030,10 @@ class _GameRoomState extends State<GameRoom> {
         final stage = _progress.currentStage(widget.endings);
         return HintPanel(
           stage: stage,
-          level: _progress.hintLevel[stage] ?? 1,
-          confirmAnswer: _confirmHint,
-          past: _past,
-          onMore: _moreHint,
+          revealed: _progress.hintLevel[stage] ?? 0,
+          loading: _hintLoading,
+          message: _hintMessage,
+          onWatch: _watchForHint,
           onClose: _closePanel,
         );
       case _Panel.menu:

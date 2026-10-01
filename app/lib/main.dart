@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'ads.dart';
 import 'game_progress.dart';
 import 'game_room.dart';
 import 'widgets/ending_screen.dart';
+import 'widgets/title_art.dart';
 
 const _saveKey = 'mio100.save.v2';
 const _endingsKey = 'mio100.endings.v1';
@@ -22,6 +24,7 @@ Future<void> main() async {
   ]);
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   final preferences = await SharedPreferences.getInstance();
+  unawaited(HintAds.instance.start());
   runApp(MioApp(preferences: preferences));
 }
 
@@ -161,47 +164,10 @@ class _TitleScreen extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        Image.asset(
-          'assets/images/room_2126.png',
-          fit: BoxFit.fill,
-          errorBuilder: (_, error, stack) =>
-              Container(color: const Color(0xFF10222C)),
-        ),
-        const DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xF0091625), Color(0xB0061728), Color(0x55030A11)],
-              stops: [0, 0.53, 1],
-            ),
-          ),
-        ),
-        Positioned(
-          left: 100,
-          top: 90,
-          width: 790,
-          child: Column(
+        TitleArt(
+          footer: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'ミオと\n百年時計',
-                style: TextStyle(
-                  color: Color(0xFFF3E6C8),
-                  fontSize: 82,
-                  height: 1.15,
-                  fontWeight: FontWeight.w700,
-                  shadows: [Shadow(color: Colors.black, blurRadius: 24)],
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                '― ときわけ書斎の約束 ―',
-                style: TextStyle(
-                  color: Color(0xFFD7C4A5),
-                  fontSize: 27,
-                  letterSpacing: 5,
-                ),
-              ),
-              const SizedBox(height: 46),
               _PlateButton(label: 'はじめから', onTap: onStart),
               const SizedBox(height: 14),
               _PlateButton(label: 'つづきから', onTap: _continueAction),
@@ -215,7 +181,7 @@ class _TitleScreen extends StatelessWidget {
             children: [
               if (endings.contains('normal'))
                 const Text(
-                  '☾ またね  ',
+                  '✦ TRUE END  ',
                   style: TextStyle(color: Color(0xFFD7C4A5), fontSize: 19),
                 ),
               const Text(

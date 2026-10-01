@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 
+import '../data/hotspots.dart';
 import '../data/mio_voice.dart';
 import '../data/story_text.dart';
 
@@ -118,6 +119,22 @@ class _EndingScreenState extends State<EndingScreen> {
                   Container(color: const Color(0xFF10222C)),
             ),
           ),
+          // The room as the player left it: clock mended, fire lit, Mio's
+          // marks on the pillar.
+          if (_index < _lines.length - 1)
+            for (final patch in [
+              clockPatchFull,
+              pillarPatch(past: false, marked: true),
+              firePatch,
+            ])
+              Positioned.fromRect(
+                rect: patch.rect,
+                child: Image.asset(
+                  patch.asset,
+                  fit: BoxFit.fill,
+                  errorBuilder: (_, error, stack) => const SizedBox.shrink(),
+                ),
+              ),
           // Darken only while text is shown; the last picture stays clear.
           AnimatedOpacity(
             opacity: _finished ? 0 : 1,
@@ -139,12 +156,14 @@ class _EndingScreenState extends State<EndingScreen> {
           ),
           // Mio, come through the years, standing in the middle of the room
           // while the two of them talk.
+          // Mio stands on the floor in the middle of the room, at the same
+          // scale as in 1926.
           if (_index >= 2 && _index < _lines.length - 1)
             Positioned(
-              left: 640 - 160,
-              top: 90,
-              width: 320,
-              height: 480,
+              left: 640 - mioRect.width / 2,
+              top: mioRect.top,
+              width: mioRect.width,
+              height: mioRect.height,
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 220),
                 child: Image.asset(

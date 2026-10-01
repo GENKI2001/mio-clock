@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/story_text.dart';
 import '../game_progress.dart';
-import 'paper_panel.dart';
-
-const _ink = Color(0xFF34291F);
+import 'washi_card.dart';
 
 /// The letters (and the old newspaper) gathered so far, to read again.
 class LettersPanel extends StatelessWidget {
@@ -16,6 +14,13 @@ class LettersPanel extends StatelessWidget {
   });
 
   static const order = ['memo1', 'memo2', 'memo3', 'memo4', 'newspaper'];
+  static const _dates = {
+    'memo1': '大正十五年 四月十三日',
+    'memo2': '昭和二年 四月十三日',
+    'memo3': '昭和三年 四月十三日',
+    'memo4': '昭和五年 四月十三日',
+    'newspaper': '昭和五年 四月十四日',
+  };
 
   final GameProgress progress;
   final ValueChanged<String> onDocument;
@@ -27,110 +32,206 @@ class LettersPanel extends StatelessWidget {
       for (final id in order)
         if (progress.docs.contains(id)) id,
     ];
-    return PaperPanel(
+    return WashiCard(
       title: '手紙',
-      width: 640,
       onClose: onClose,
       child: letters.isEmpty
-          ? const Padding(
-              padding: EdgeInsets.symmetric(vertical: 24),
-              child: Text('まだ手紙はない。'),
+          ? const Center(
+              child: Text(
+                'まだ手紙はない。',
+                style: TextStyle(color: washiInk, fontSize: 20),
+              ),
             )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (final id in letters)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: FilledButton(
-                      onPressed: () => onDocument(id),
-                      style: parchmentButton(),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(documentTitles[id] ?? id),
-                      ),
-                    ),
-                  ),
-              ],
+          : GridView.count(
+              crossAxisCount: 4,
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              childAspectRatio: 0.74,
+              children: [for (final id in letters) _letterCard(id)],
             ),
+    );
+  }
+
+  Widget _letterCard(String id) {
+    final thumb = id == 'newspaper'
+        ? 'assets/images/scene_newspaper.jpg'
+        : 'assets/images/letter_$id.jpg';
+    return WashiRow(
+      key: Key('letter-$id'),
+      onTap: () => onDocument(id),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: Image.asset(
+                thumb,
+                fit: BoxFit.cover,
+                alignment: Alignment.topCenter,
+                errorBuilder: (_, error, stack) =>
+                    const ColoredBox(color: Color(0xFFEFE2C4)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            documentTitles[id] ?? id,
+            maxLines: 2,
+            style: const TextStyle(
+              color: washiInk,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              height: 1.3,
+            ),
+          ),
+          Text(
+            _dates[id] ?? '',
+            style: const TextStyle(color: washiAccent, fontSize: 12),
+          ),
+        ],
+      ),
     );
   }
 }
 
+/// Hints, each unlocked by watching a short ad. What has been revealed stays
+/// readable for free.
 class HintPanel extends StatelessWidget {
   const HintPanel({
     super.key,
     required this.stage,
-    required this.level,
-    required this.confirmAnswer,
-    required this.past,
-    required this.onMore,
+    required this.revealed,
+    required this.loading,
+    required this.message,
+    required this.onWatch,
     required this.onClose,
   });
 
+  static const _labels = ['ヒント 1', 'ヒント 2', '答え'];
+
   final String stage;
-  final int level;
-  final bool confirmAnswer;
-  final bool past;
-  final VoidCallback onMore;
+  final int revealed;
+  final bool loading;
+  final String? message;
+  final VoidCallback onWatch;
   final VoidCallback onClose;
 
   @override
   Widget build(BuildContext context) {
     final hints = hintText[stage] ?? const <String>[];
-    return PaperPanel(
-      title: past ? 'ミオのヒント' : 'ミオの声を思い出す',
-      width: 800,
+    return WashiCard(
+      title: 'ヒント',
       onClose: onClose,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: ListView(
         children: [
-          for (var index = 0; index < level && index < hints.length; index++)
+          for (var index = 0; index < 3 && index < hints.length; index++)
             Padding(
-              padding: const EdgeInsets.only(bottom: 17),
-              child: Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: index == level - 1
-                      ? const Color(0xFFE9D3A9)
-                      : const Color(0xFFF8EDD6),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '${index + 1}. ${hints[index]}',
-                  style: const TextStyle(
-                    color: _ink,
-                    fontSize: 21,
-                    height: 1.5,
-                  ),
-                ),
-              ),
+              padding: const EdgeInsets.only(bottom: 12),
+              child: index < revealed
+                  ? _revealed(index, hints[index])
+                  : index == revealed
+                  ? _next(index)
+                  : _locked(index),
             ),
-          if (confirmAnswer)
-            const Padding(
-              padding: EdgeInsets.only(bottom: 13),
-              child: Text(
-                '次は答えを表示します。見ますか?',
-                style: TextStyle(
-                  color: Color(0xFF9B3F31),
-                  fontSize: 21,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          if (level < 3)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: FilledButton(
-                onPressed: onMore,
-                style: parchmentButton(primary: confirmAnswer),
-                child: Text(confirmAnswer ? '答えを見る' : 'もう一段階見る'),
+          if (message != null)
+            Text(
+              message!,
+              style: const TextStyle(
+                color: washiRed,
+                fontSize: 16,
+                height: 1.5,
               ),
             ),
         ],
       ),
     );
   }
+
+  Widget _badge(int index, {bool dim = false}) => Container(
+    width: 74,
+    padding: const EdgeInsets.symmetric(vertical: 4),
+    alignment: Alignment.center,
+    decoration: BoxDecoration(
+      color: dim ? const Color(0x338A5A36) : washiAccent,
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Text(
+      _labels[index],
+      style: TextStyle(
+        color: dim ? washiAccent : const Color(0xFFFFF4E0),
+        fontSize: 13,
+        fontWeight: FontWeight.w700,
+      ),
+    ),
+  );
+
+  Widget _revealed(int index, String text) => WashiRow(
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _badge(index),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(color: washiInk, fontSize: 18, height: 1.55),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _next(int index) => WashiRow(
+    key: const Key('hint-watch'),
+    onTap: loading ? null : onWatch,
+    tint: const Color(0xB3FFF6E6),
+    border: washiAccent,
+    child: Row(
+      children: [
+        _badge(index),
+        const SizedBox(width: 14),
+        Icon(
+          loading ? Icons.hourglass_top : Icons.smart_display_outlined,
+          color: washiAccent,
+          size: 28,
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            loading
+                ? '広告を読み込んでいます……'
+                : index == 2
+                ? '広告を見て、答えを見る'
+                : '広告を見て、${_labels[index]}を見る',
+            style: const TextStyle(
+              color: washiInk,
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        if (!loading) const Icon(Icons.chevron_right, color: washiAccent),
+      ],
+    ),
+  );
+
+  Widget _locked(int index) => WashiRow(
+    tint: const Color(0x26FFFFFF),
+    border: const Color(0x338A5A36),
+    child: Row(
+      children: [
+        _badge(index, dim: true),
+        const SizedBox(width: 14),
+        const Icon(Icons.lock_outline, color: Color(0x998A5A36), size: 22),
+        const SizedBox(width: 10),
+        const Text(
+          '前のヒントを見ると選べます',
+          style: TextStyle(color: Color(0x998A5A36), fontSize: 16),
+        ),
+      ],
+    ),
+  );
 }
 
 class MenuPanel extends StatelessWidget {
@@ -157,44 +258,101 @@ class MenuPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PaperPanel(
-      title: '設定',
-      width: 710,
-      onClose: onClose,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+    Widget setting(IconData icon, String label, Widget control) => WashiRow(
+      child: Row(
         children: [
-          FilledButton.icon(
-            onPressed: onToggleText,
-            icon: const Icon(Icons.text_fields),
-            label: Text('文字サイズ: ${largeText ? '大' : '標準'}'),
-            style: parchmentButton(),
+          Icon(icon, color: washiAccent, size: 26),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(color: washiInk, fontSize: 19),
+            ),
           ),
-          const SizedBox(height: 13),
-          FilledButton.icon(
-            onPressed: onToggleSound,
-            icon: Icon(soundOn ? Icons.volume_up : Icons.volume_off),
-            label: Text('音: ${soundOn ? 'あり' : 'なし'}'),
-            style: parchmentButton(),
-          ),
-          const SizedBox(height: 24),
-          FilledButton.icon(
-            onPressed: onTitle,
-            icon: const Icon(Icons.home_outlined),
-            label: const Text('タイトルへ戻る'),
-            style: parchmentButton(),
-          ),
-          const SizedBox(height: 13),
-          OutlinedButton.icon(
-            onPressed: onReset,
-            icon: const Icon(Icons.restart_alt),
-            label: Text(confirmReset ? '本当に最初からやり直す' : '最初からやり直す'),
-            style: ButtonStyle(
-              foregroundColor: const WidgetStatePropertyAll(Color(0xFF9B3F31)),
-              textStyle: const WidgetStatePropertyAll(TextStyle(fontSize: 20)),
-              padding: const WidgetStatePropertyAll(
-                EdgeInsets.symmetric(horizontal: 22, vertical: 13),
+          control,
+        ],
+      ),
+    );
+    return WashiCard(
+      title: 'メニュー',
+      width: 700,
+      height: 520,
+      onClose: onClose,
+      child: ListView(
+        children: [
+          setting(
+            Icons.text_fields,
+            '文字の大きさ',
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value: false, label: Text('標準')),
+                ButtonSegment(value: true, label: Text('大')),
+              ],
+              selected: {largeText},
+              showSelectedIcon: false,
+              onSelectionChanged: (_) => onToggleText(),
+              style: ButtonStyle(
+                foregroundColor: WidgetStateProperty.resolveWith(
+                  (states) => states.contains(WidgetState.selected)
+                      ? const Color(0xFFFFF4E0)
+                      : washiInk,
+                ),
+                backgroundColor: WidgetStateProperty.resolveWith(
+                  (states) => states.contains(WidgetState.selected)
+                      ? washiAccent
+                      : Colors.transparent,
+                ),
+                side: const WidgetStatePropertyAll(
+                  BorderSide(color: washiAccent),
+                ),
               ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          setting(
+            soundOn ? Icons.volume_up : Icons.volume_off,
+            '音と声',
+            Switch(
+              value: soundOn,
+              onChanged: (_) => onToggleSound(),
+              activeThumbColor: const Color(0xFFFFF4E0),
+              activeTrackColor: washiAccent,
+            ),
+          ),
+          const SizedBox(height: 22),
+          WashiRow(
+            onTap: onTitle,
+            child: const Row(
+              children: [
+                Icon(Icons.home_outlined, color: washiAccent, size: 26),
+                SizedBox(width: 14),
+                Text(
+                  'タイトルへ戻る',
+                  style: TextStyle(color: washiInk, fontSize: 19),
+                ),
+                Spacer(),
+                Icon(Icons.chevron_right, color: washiAccent),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          WashiRow(
+            onTap: onReset,
+            tint: confirmReset
+                ? const Color(0x33A0473A)
+                : const Color(0x73FFFFFF),
+            border: const Color(0x99A0473A),
+            child: Row(
+              children: [
+                const Icon(Icons.restart_alt, color: washiRed, size: 26),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    confirmReset ? 'もう一度押すと、最初からになります' : '最初からやり直す',
+                    style: const TextStyle(color: washiRed, fontSize: 19),
+                  ),
+                ),
+              ],
             ),
           ),
         ],

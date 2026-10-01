@@ -47,7 +47,7 @@ void main() {
     }
     await tester.tap(find.text('タイトルへ戻る'));
     await tester.pump();
-    expect(find.textContaining('またね'), findsWidgets);
+    expect(find.textContaining('TRUE END'), findsWidgets);
     expect(find.text('つづきから'), findsOneWidget);
     expect(preferences.getStringList('mio100.endings.v1'), contains('normal'));
     expect(preferences.getString('mio100.save.v2'), isNull);
