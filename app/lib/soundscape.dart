@@ -10,9 +10,11 @@ class Soundscape {
   final AudioPlayer _future = AudioPlayer();
   final AudioPlayer _effects = AudioPlayer();
   final AudioPlayer _tick = AudioPlayer();
+  final AudioPlayer _voice = AudioPlayer();
   Timer? _fadeTimer;
   Timer? _tickTimer;
   Timer? _whisperTimer;
+  Timer? _voiceDelay;
   final Random _random = Random();
   Era _era = Era.future;
   bool _enabled = true;
@@ -101,6 +103,24 @@ class Soundscape {
     );
   }
 
+  /// Mio's recorded line [id]; any line still playing is cut off first.
+  /// A short breath after the line appears before Mio starts speaking.
+  void speak(String id) {
+    _voiceDelay?.cancel();
+    unawaited(_voice.stop().catchError((_) {}));
+    if (!_enabled) return;
+    _voiceDelay = Timer(const Duration(milliseconds: 280), () {
+      unawaited(
+        _voice.play(AssetSource('voice/$id.m4a'), volume: 1).catchError((_) {}),
+      );
+    });
+  }
+
+  void stopVoice() {
+    _voiceDelay?.cancel();
+    unawaited(_voice.stop().catchError((_) {}));
+  }
+
   void _updateTick() {
     _tickTimer?.cancel();
     _whisperTimer?.cancel();
@@ -121,11 +141,13 @@ class Soundscape {
     _fadeTimer?.cancel();
     _tickTimer?.cancel();
     _whisperTimer?.cancel();
+    _voiceDelay?.cancel();
     await Future.wait([
       _past.dispose(),
       _future.dispose(),
       _effects.dispose(),
       _tick.dispose(),
+      _voice.dispose(),
     ]);
   }
 }

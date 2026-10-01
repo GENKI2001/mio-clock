@@ -2,7 +2,27 @@ import 'dart:convert';
 
 enum Era { past, future }
 
-enum GearSpot { workbench, windowsill, desk, fireplace, tin }
+/// Items the player can carry in 2026. In 1926 the player is see-through and
+/// cannot hold anything, so Mio does the handling there.
+const itemOrder = [
+  'windKey',
+  'matches',
+  'gear',
+  'driver',
+  'blankLetter',
+  'pendulum',
+  'oil',
+];
+
+const itemNames = <String, String>{
+  'windKey': 'ねじ巻き鍵',
+  'matches': 'マッチ',
+  'gear': '歯車',
+  'driver': 'ドライバー',
+  'blankLetter': '白紙の手紙',
+  'pendulum': '振り子',
+  'oil': '時計油',
+};
 
 class GameProgress {
   GameProgress({
@@ -10,16 +30,17 @@ class GameProgress {
     this.introSeen = false,
     this.metMio = false,
     this.drawerOpened = false,
-    this.gearSpot = GearSpot.workbench,
-    this.holding1926 = false,
-    this.nicheRevealed = false,
-    this.tinOpened2126 = false,
-    this.heightMarked = false,
-    this.backPanelOpened = false,
-    this.cipherLearned = false,
-    this.chairSearched = false,
+    this.gearInTin = false,
+    this.tinOpened = false,
     this.clockGearInstalled = false,
+    this.heightMarked = false,
+    this.boxOpened = false,
+    this.fireLit = false,
+    this.chairSearched = false,
     this.clockPendulumInstalled = false,
+    this.oilHidden = false,
+    this.oilTaken = false,
+    this.clockOiled = false,
     this.clockRunning = false,
     this.farewellCount = 0,
     Set<String>? inventory,
@@ -37,16 +58,28 @@ class GameProgress {
   bool introSeen;
   bool metMio;
   bool drawerOpened;
-  GearSpot gearSpot;
-  bool holding1926;
-  bool nicheRevealed;
-  bool tinOpened2126;
-  bool heightMarked;
-  bool backPanelOpened;
-  bool cipherLearned;
-  bool chairSearched;
+
+  /// Mio sealed the spare gear into her treasure tin in 1926.
+  bool gearInTin;
+  bool tinOpened;
   bool clockGearInstalled;
+
+  /// Mio started marking her height on the pillar each birthday.
+  bool heightMarked;
+
+  /// The little box on the shelf beside the blackboard, locked with the
+  /// year Mio grew the most.
+  bool boxOpened;
+
+  /// The 2026 fireplace, lit with the matches.
+  bool fireLit;
+  bool chairSearched;
   bool clockPendulumInstalled;
+
+  /// Mio sealed clock oil into the clock base's drawer in 1926.
+  bool oilHidden;
+  bool oilTaken;
+  bool clockOiled;
   bool clockRunning;
   int farewellCount;
   final Set<String> inventory;
@@ -56,28 +89,17 @@ class GameProgress {
   final Map<String, bool> flags;
 
   bool get hasProgress =>
-      metMio ||
-      drawerOpened ||
-      notes.isNotEmpty ||
-      docs.isNotEmpty ||
-      gearSpot != GearSpot.workbench ||
-      clockRunning;
+      metMio || drawerOpened || docs.isNotEmpty || clockRunning;
 
-  bool get hasWindKey => inventory.contains('windKey');
-  bool get hasGear => inventory.contains('gear');
-  bool get hasPendulum => inventory.contains('pendulum');
+  bool flag(String name) => flags[name] == true;
 
   void travel() {
     if (era == Era.past) {
-      holding1926 = false;
       farewellCount++;
       era = Era.future;
     } else {
       era = Era.past;
-      if (!metMio) {
-        metMio = true;
-        notes.add('n_promise');
-      }
+      metMio = true;
     }
   }
 
@@ -86,42 +108,29 @@ class GameProgress {
       return false;
     }
     drawerOpened = true;
-    inventory.add('windKey');
+    inventory.addAll(['windKey', 'matches']);
     docs.add('memo1');
     return true;
   }
 
-  bool pickGear() {
-    if (era != Era.past || holding1926 || gearSpot == GearSpot.tin) {
-      return false;
-    }
-    holding1926 = true;
-    flags['gearHeld'] = true;
+  bool sealGearInTin() {
+    if (era != Era.past || gearInTin) return false;
+    gearInTin = true;
+    notes.add('n_tin');
     return true;
   }
 
-  bool placeGear(GearSpot spot) {
-    if (era != Era.past || !holding1926 || gearSpot == GearSpot.tin) {
-      return false;
-    }
-    gearSpot = spot;
-    holding1926 = false;
-    if (spot == GearSpot.tin) {
-      nicheRevealed = true;
-      notes.add('n_niche');
-    }
-    return true;
-  }
-
-  bool collectGear() {
+  /// Softens the wax seal with a match and takes out the gear and letter.
+  bool openTin() {
     if (era != Era.future ||
-        gearSpot != GearSpot.tin ||
-        !nicheRevealed ||
-        tinOpened2126) {
+        !gearInTin ||
+        tinOpened ||
+        !inventory.contains('matches')) {
       return false;
     }
-    tinOpened2126 = true;
+    tinOpened = true;
     inventory.add('gear');
+    _spendMatchesIfDone();
     docs.add('memo2');
     return true;
   }
@@ -134,34 +143,65 @@ class GameProgress {
     return true;
   }
 
-  bool tryOpenBackPanel(List<int> digits) {
-    if (era != Era.future ||
-        !clockGearInstalled ||
-        backPanelOpened ||
-        !_matches(digits, [1, 9, 2, 8])) {
+  bool markHeight() {
+    if (era != Era.past || heightMarked) return false;
+    heightMarked = true;
+    notes.add('n_heightStart');
+    return true;
+  }
+
+  bool tryOpenBox(List<int> digits) {
+    if (era != Era.future || boxOpened || !_matches(digits, [1, 9, 2, 8])) {
       return false;
     }
-    backPanelOpened = true;
+    boxOpened = true;
+    inventory.addAll(['driver', 'blankLetter']);
+    return true;
+  }
+
+  bool lightFire() {
+    if (era != Era.future || fireLit || !inventory.contains('matches')) {
+      return false;
+    }
+    fireLit = true;
+    _spendMatchesIfDone();
+    return true;
+  }
+
+  /// The matches are for the tin's wax and the fireplace; once both are
+  /// done the box is empty.
+  void _spendMatchesIfDone() {
+    if (tinOpened && fireLit) inventory.remove('matches');
+  }
+
+  /// Warms Mio's citrus-ink letter over the fire until the words show.
+  bool revealLetter() {
+    if (era != Era.future || !fireLit || !inventory.remove('blankLetter')) {
+      return false;
+    }
     docs.add('memo3');
     return true;
   }
 
+  /// Unscrews the floorboard under the chair Mio loves.
   bool searchChair() {
     if (era != Era.future ||
         chairSearched ||
         !docs.contains('memo3') ||
-        !cipherLearned) {
+        !inventory.contains('driver')) {
       return false;
     }
     chairSearched = true;
-    inventory.add('pendulum');
+    inventory
+      ..remove('driver')
+      ..add('pendulum');
     docs.add('memo4');
     return true;
   }
 
   bool installPendulum() {
     if (era != Era.future ||
-        !backPanelOpened ||
+        !clockGearInstalled ||
         clockPendulumInstalled ||
         !inventory.remove('pendulum')) {
       return false;
@@ -170,11 +210,52 @@ class GameProgress {
     return true;
   }
 
+  bool hideOil() {
+    if (era != Era.past || oilHidden || !flag('springRusty')) return false;
+    oilHidden = true;
+    notes.add('n_oil');
+    return true;
+  }
+
+  /// The clock base's drawer, locked with the number Mio got from her father
+  /// and scratched into the window glass.
+  bool tryOpenBase(List<int> digits) {
+    if (era != Era.future ||
+        !oilHidden ||
+        flag('baseUnlocked') ||
+        !_matches(digits, [2, 7, 5])) {
+      return false;
+    }
+    flags['baseUnlocked'] = true;
+    return true;
+  }
+
+  bool takeOil() {
+    if (era != Era.future || !oilHidden || oilTaken || !flag('baseUnlocked')) {
+      return false;
+    }
+    oilTaken = true;
+    inventory.add('oil');
+    return true;
+  }
+
+  bool oilClock() {
+    if (era != Era.future ||
+        clockOiled ||
+        !clockPendulumInstalled ||
+        !inventory.remove('oil')) {
+      return false;
+    }
+    clockOiled = true;
+    return true;
+  }
+
   bool windClock() {
     if (era != Era.future ||
         clockRunning ||
         !clockGearInstalled ||
         !clockPendulumInstalled ||
+        !clockOiled ||
         !inventory.remove('windKey')) {
       return false;
     }
@@ -186,10 +267,10 @@ class GameProgress {
   String currentStage(Set<String> endings) {
     if (!drawerOpened) return 's1';
     if (!clockGearInstalled) return 's2';
-    if (!backPanelOpened) return 's3';
+    if (!boxOpened) return 's3';
     if (!clockPendulumInstalled) return 's4';
     if (!clockRunning) return 's5';
-    return endings.contains('normal') ? 'sTrue' : 's6';
+    return 's6';
   }
 
   int revealHint(String stage) {
@@ -211,16 +292,17 @@ class GameProgress {
     'introSeen': introSeen,
     'metMio': metMio,
     'drawerOpened': drawerOpened,
-    'gearSpot': gearSpot.name,
-    'holding1926': holding1926,
-    'nicheRevealed': nicheRevealed,
-    'tinOpened2126': tinOpened2126,
-    'heightMarked': heightMarked,
-    'backPanelOpened': backPanelOpened,
-    'cipherLearned': cipherLearned,
-    'chairSearched': chairSearched,
+    'gearInTin': gearInTin,
+    'tinOpened': tinOpened,
     'clockGearInstalled': clockGearInstalled,
+    'heightMarked': heightMarked,
+    'boxOpened': boxOpened,
+    'fireLit': fireLit,
+    'chairSearched': chairSearched,
     'clockPendulumInstalled': clockPendulumInstalled,
+    'oilHidden': oilHidden,
+    'oilTaken': oilTaken,
+    'clockOiled': clockOiled,
     'clockRunning': clockRunning,
     'farewellCount': farewellCount,
     'inventory': inventory.toList(),
@@ -234,19 +316,7 @@ class GameProgress {
     try {
       final decoded = jsonDecode(source);
       if (decoded is! Map<String, dynamic>) return GameProgress();
-      final spotName = decoded['gearSpot'];
-      final spot = GearSpot.values.firstWhere(
-        (value) => value.name == spotName,
-        orElse: () => GearSpot.workbench,
-      );
-      final inventory = _stringSet(decoded['inventory']);
-      if (decoded['inventory'] == null && decoded['drawerOpened'] == true) {
-        inventory.add('windKey');
-      }
-      final docs = _stringSet(decoded['docs']);
-      if (decoded['memoRead'] == true) docs.add('memo1');
-      final notes = _stringSet(decoded['notes']);
-      if (decoded['calendarSeen'] == true) notes.add('n_calendar');
+      bool read(String key) => decoded[key] == true;
       final hints = <String, int>{};
       if (decoded['hintLevel'] is Map) {
         for (final entry in (decoded['hintLevel'] as Map).entries) {
@@ -254,8 +324,6 @@ class GameProgress {
             hints[entry.key as String] = (entry.value as int).clamp(0, 3);
           }
         }
-      } else if (decoded['hintLevel'] is int) {
-        hints['s1'] = (decoded['hintLevel'] as int).clamp(0, 3);
       }
       final flags = <String, bool>{};
       if (decoded['flags'] is Map) {
@@ -267,29 +335,27 @@ class GameProgress {
       }
       return GameProgress(
         era: decoded['era'] == 'past' ? Era.past : Era.future,
-        introSeen:
-            decoded['introSeen'] == true ||
-            decoded['metMio'] == true ||
-            decoded['drawerOpened'] == true,
-        metMio: decoded['metMio'] == true,
-        drawerOpened: decoded['drawerOpened'] == true,
-        gearSpot: spot,
-        holding1926: decoded['holding1926'] == true,
-        nicheRevealed: decoded['nicheRevealed'] == true,
-        tinOpened2126: decoded['tinOpened2126'] == true,
-        heightMarked: decoded['heightMarked'] == true,
-        backPanelOpened: decoded['backPanelOpened'] == true,
-        cipherLearned: decoded['cipherLearned'] == true,
-        chairSearched: decoded['chairSearched'] == true,
-        clockGearInstalled: decoded['clockGearInstalled'] == true,
-        clockPendulumInstalled: decoded['clockPendulumInstalled'] == true,
-        clockRunning: decoded['clockRunning'] == true,
+        introSeen: read('introSeen'),
+        metMio: read('metMio'),
+        drawerOpened: read('drawerOpened'),
+        gearInTin: read('gearInTin'),
+        tinOpened: read('tinOpened'),
+        clockGearInstalled: read('clockGearInstalled'),
+        heightMarked: read('heightMarked'),
+        boxOpened: read('boxOpened'),
+        fireLit: read('fireLit'),
+        chairSearched: read('chairSearched'),
+        clockPendulumInstalled: read('clockPendulumInstalled'),
+        oilHidden: read('oilHidden'),
+        oilTaken: read('oilTaken'),
+        clockOiled: read('clockOiled'),
+        clockRunning: read('clockRunning'),
         farewellCount: decoded['farewellCount'] is int
             ? decoded['farewellCount'] as int
             : 0,
-        inventory: inventory,
-        docs: docs,
-        notes: notes,
+        inventory: _stringSet(decoded['inventory']),
+        docs: _stringSet(decoded['docs']),
+        notes: _stringSet(decoded['notes']),
         hintLevel: hints,
         flags: flags,
       );
@@ -306,30 +372,46 @@ class GameProgress {
     introSeen: true,
     metMio: true,
     drawerOpened: true,
-    gearSpot: GearSpot.tin,
-    nicheRevealed: true,
-    tinOpened2126: true,
-    heightMarked: true,
-    backPanelOpened: true,
-    cipherLearned: true,
-    chairSearched: true,
+    gearInTin: true,
+    tinOpened: true,
     clockGearInstalled: true,
+    heightMarked: true,
+    boxOpened: true,
+    fireLit: true,
+    chairSearched: true,
     clockPendulumInstalled: true,
+    oilHidden: true,
+    oilTaken: true,
+    clockOiled: true,
     clockRunning: true,
     docs: {'memo1', 'memo2', 'memo3', 'memo4', 'newspaper'},
+    flags: {
+      'doorRecessSeen': true,
+      'tourStarted': true,
+      'clockChecked': true,
+      'tourDone': true,
+      'watchPromised': true,
+      'springRusty': true,
+      'favoritePlace': true,
+      'codeOnBoard': true,
+      'codeOnWindow': true,
+      'baseUnlocked': true,
+    },
     notes: {
       'n_watchMT',
-      'n_promise',
       'n_calendar',
       'n_missingGear',
-      'n_niche',
+      'n_tin',
       'n_heightStart',
       'n_pillar',
-      'n_backPanelLock',
-      'n_cipher',
-      'n_example',
+      'n_boxLock',
+      'n_favoritePlace',
+      'n_rustySpring',
+      'n_oil',
       'n_clockRunning',
       'n_door',
+      'n_clockStopped',
+      'n_watchPromise',
       'n_mioWatch',
     },
   );

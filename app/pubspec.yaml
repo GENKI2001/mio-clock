@@ -58,11 +58,21 @@ flutter:
   assets:
     - assets/images/
     - assets/audio/
+    - assets/voice/
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  # Mio's handwriting: a girl's round hand, and the pen hand she grew into.
+  fonts:
+    - family: MioHand
+      fonts:
+        - asset: assets/fonts/Yomogi-Regular.ttf
+    - family: MioPen
+      fonts:
+        - asset: assets/fonts/KleeOne-Regular.ttf
 
   # To add assets to your application, add an assets section, like this:
   # assets:

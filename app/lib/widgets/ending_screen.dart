@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 
+import '../data/mio_voice.dart';
 import '../data/story_text.dart';
 
 class EndingScreen extends StatefulWidget {
@@ -23,29 +24,58 @@ class EndingScreen extends StatefulWidget {
 
 class _EndingScreenState extends State<EndingScreen> {
   final AudioPlayer _music = AudioPlayer();
-  final AudioPlayer _chime = AudioPlayer();
+  final AudioPlayer _voice = AudioPlayer();
+  Timer? _voiceDelay;
   int _index = 0;
 
-  bool get _trueEnding => widget.kind == 'true';
-  List<DialogueLine> get _lines =>
-      _trueEnding ? trueEndingLines : normalEndingLines;
+  List<DialogueLine> get _lines => normalEndingLines;
+
+  /// Mio keeps the face of her most recent line.
+  String get _mioSprite {
+    var expression = 'normal';
+    for (var index = 0; index <= _index && index < _lines.length; index++) {
+      if (_lines[index].speaker == 'ミオ') {
+        expression = _lines[index].expression ?? 'normal';
+      }
+    }
+    return switch (expression) {
+      'smile' => 'assets/images/mio_14_smile.png',
+      'surprise' => 'assets/images/mio_14_surprise.png',
+      'embarrassed' => 'assets/images/mio_14_embarrassed.png',
+      'proud' => 'assets/images/mio_14_proud.png',
+      'sad' => 'assets/images/mio_14_sad.png',
+      _ => 'assets/images/mio_14.png',
+    };
+  }
+
+  bool get _finished => _index >= _lines.length;
 
   @override
   void initState() {
     super.initState();
     if (widget.soundOn) unawaited(_startAudio());
+    _speak();
+  }
+
+  /// Mio's line, a breath after it appears.
+  void _speak() {
+    _voiceDelay?.cancel();
+    unawaited(_voice.stop().catchError((_) {}));
+    if (!widget.soundOn || _finished) return;
+    final line = _lines[_index];
+    final id = line.speaker == 'ミオ' ? mioVoice[line.text] : null;
+    if (id == null) return;
+    _voiceDelay = Timer(const Duration(milliseconds: 280), () {
+      unawaited(
+        _voice.play(AssetSource('voice/$id.m4a'), volume: 1).catchError((_) {}),
+      );
+    });
   }
 
   Future<void> _startAudio() async {
     try {
       await _music.setReleaseMode(ReleaseMode.loop);
-      await _music.play(
-        AssetSource(_trueEnding ? 'audio/bgm_true.wav' : 'audio/bgm_2126.wav'),
-        volume: _trueEnding ? 0.42 : 0.26,
-      );
-      if (_trueEnding && mounted) {
-        await _chime.play(AssetSource('audio/jingle_chime.wav'), volume: 0.72);
-      }
+      await _music.play(AssetSource('audio/bgm_2126.wav'), volume: 0.26);
     } catch (_) {
       // The ending remains playable when audio is unavailable.
     }
@@ -53,32 +83,26 @@ class _EndingScreenState extends State<EndingScreen> {
 
   @override
   void dispose() {
+    _voiceDelay?.cancel();
     unawaited(_music.dispose());
-    unawaited(_chime.dispose());
+    unawaited(_voice.dispose());
     super.dispose();
   }
 
   void _advance() {
-    if (_index < _lines.length) setState(() => _index++);
+    if (_index < _lines.length) {
+      setState(() => _index++);
+      _speak();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final background = _trueEnding
-        ? (_index >= _lines.length
-              ? 'assets/images/cg_true_epilogue.png'
-              : 'assets/images/room_dawn.png')
-        : (_index >= 3
-              ? 'assets/images/cg_normal.png'
-              : 'assets/images/room_2126.png');
-    var adultSprite = 'assets/images/mio_18.png';
-    for (var index = 0; index <= _index && index < _lines.length; index++) {
-      if (_lines[index].expression == 'adult_normal') {
-        adultSprite = 'assets/images/mio_18_normal.png';
-      } else if (_lines[index].expression == 'adult_cry') {
-        adultSprite = 'assets/images/mio_18.png';
-      }
-    }
+    // The reunion plays out in the room; the last line opens on the picture
+    // of the two of them walking out into the city.
+    final background = _index >= _lines.length - 1
+        ? 'assets/images/cg_true_epilogue.png'
+        : 'assets/images/room_2126.png';
     return GestureDetector(
       onTap: _advance,
       child: Stack(
@@ -94,54 +118,44 @@ class _EndingScreenState extends State<EndingScreen> {
                   Container(color: const Color(0xFF10222C)),
             ),
           ),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: _trueEnding
-                    ? const [
-                        Color(0x33050E18),
-                        Colors.transparent,
-                        Color(0xC90A1820),
-                      ]
-                    : const [
-                        Color(0xAA030C16),
-                        Color(0x6605111B),
-                        Color(0xED06111A),
-                      ],
+          // Darken only while text is shown; the last picture stays clear.
+          AnimatedOpacity(
+            opacity: _finished ? 0 : 1,
+            duration: const Duration(milliseconds: 800),
+            child: const DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Color(0x66030C16),
+                    Colors.transparent,
+                    Color(0xD906111A),
+                  ],
+                  stops: [0, 0.45, 1],
+                ),
               ),
             ),
           ),
-          if (_trueEnding && _index >= 2 && _index < _lines.length)
+          // Mio, come through the years, standing in the middle of the room
+          // while the two of them talk.
+          if (_index >= 2 && _index < _lines.length - 1)
             Positioned(
-              right: 155,
-              bottom: 93,
-              width: 275,
-              height: 590,
+              left: 640 - 160,
+              top: 90,
+              width: 320,
+              height: 480,
               child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 250),
+                duration: const Duration(milliseconds: 220),
                 child: Image.asset(
-                  adultSprite,
-                  key: ValueKey(adultSprite),
+                  _mioSprite,
+                  key: ValueKey(_mioSprite),
                   fit: BoxFit.contain,
-                  errorBuilder: (_, error, stack) => const SizedBox(),
+                  errorBuilder: (_, error, stack) => const SizedBox.shrink(),
                 ),
               ),
             ),
-          if (_index < _lines.length) ...[
-            Positioned(
-              left: 45,
-              top: 28,
-              child: Text(
-                _trueEnding ? '百年ぶりの夜明け' : '百年後の夜',
-                style: const TextStyle(
-                  color: Color(0xFFEACB91),
-                  fontSize: 24,
-                  letterSpacing: 4,
-                ),
-              ),
-            ),
+          if (!_finished)
             Positioned(
               left: 130,
               right: 130,
@@ -198,76 +212,45 @@ class _EndingScreenState extends State<EndingScreen> {
                   ),
                 ),
               ),
-            ),
-          ] else
-            Center(
+            )
+          else
+            // A small card tucked into the corner, so the picture is seen.
+            Positioned(
+              right: 28,
+              bottom: 26,
               child: Container(
-                width: 900,
-                padding: const EdgeInsets.all(44),
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
                 decoration: BoxDecoration(
-                  color: const Color(0xE6091B26),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFE8BF79), width: 2),
-                  boxShadow: const [
-                    BoxShadow(color: Colors.black87, blurRadius: 30),
-                  ],
+                  color: const Color(0xC8091B26),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0x99E8BF79)),
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text(
-                      _trueEnding ? 'TRUE END' : 'NORMAL END',
-                      style: const TextStyle(
-                        color: Color(0xFFE8BF79),
-                        fontSize: 25,
-                        letterSpacing: 7,
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    Text(
-                      _trueEnding ? 'おかえり、百年ぶりのミオ' : 'またね、の約束',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
+                    const Text(
+                      'TRUE END',
+                      style: TextStyle(
                         color: Color(0xFFFFF1D5),
-                        fontSize: 43,
+                        fontSize: 26,
                         fontWeight: FontWeight.w700,
+                        letterSpacing: 6,
                       ),
                     ),
-                    const SizedBox(height: 22),
-                    Text(
-                      _trueEnding
-                          ? '百年前に止まった約束が、いま動き出した。'
-                          : '扉は開いた。まだ「もっと正解」の言葉があるのかもしれない。',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Color(0xFFE2D0B1),
-                        fontSize: 20,
-                      ),
-                    ),
-                    const SizedBox(height: 28),
-                    FilledButton.icon(
+                    const SizedBox(height: 10),
+                    TextButton.icon(
                       onPressed: widget.onFinish,
-                      icon: const Icon(Icons.home_outlined),
+                      icon: const Icon(Icons.home_outlined, size: 20),
                       label: const Text('タイトルへ戻る'),
                       style: const ButtonStyle(
-                        backgroundColor: WidgetStatePropertyAll(
-                          Color(0xFF956039),
-                        ),
                         foregroundColor: WidgetStatePropertyAll(
                           Color(0xFFFFF1D5),
                         ),
-                        padding: WidgetStatePropertyAll(
-                          EdgeInsets.symmetric(horizontal: 25, vertical: 15),
-                        ),
                         textStyle: WidgetStatePropertyAll(
-                          TextStyle(fontSize: 22),
+                          TextStyle(fontSize: 18),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 18),
-                    const Text(
-                      'ミオと百年時計  ·  企画・物語・アート・実装',
-                      style: TextStyle(color: Color(0xFFBBA987), fontSize: 15),
                     ),
                   ],
                 ),

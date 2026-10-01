@@ -32,37 +32,29 @@ void main() {
         .resetDevicePixelRatio();
   });
 
-  for (final kind in ['normal', 'true']) {
-    testWidgets('$kind ending reaches its title card and returns', (
-      tester,
-    ) async {
-      var finished = false;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: EndingScreen(
-              kind: kind,
-              soundOn: false,
-              onFinish: () => finished = true,
-            ),
+  testWidgets('結末を最後まで読むと、隅の小さな札から戻れる', (tester) async {
+    var finished = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: EndingScreen(
+            kind: 'normal',
+            soundOn: false,
+            onFinish: () => finished = true,
           ),
         ),
-      );
-      final lineCount = kind == 'normal'
-          ? normalEndingLines.length
-          : trueEndingLines.length;
-      for (var index = 0; index < lineCount; index++) {
-        await tester.tapAt(const Offset(640, 250));
-        await tester.pump();
-      }
-      expect(
-        find.text(kind == 'normal' ? 'NORMAL END' : 'TRUE END'),
-        findsOneWidget,
-      );
-      await tester.tap(find.text('タイトルへ戻る'));
+      ),
+    );
+    for (var index = 0; index < normalEndingLines.length; index++) {
+      await tester.tapAt(const Offset(640, 250));
       await tester.pump();
-      expect(finished, isTrue);
-      expect(tester.takeException(), isNull);
-    });
-  }
+    }
+    expect(find.text('TRUE END'), findsOneWidget);
+    // The card sits in the lower right, leaving the picture uncovered.
+    expect(tester.getCenter(find.text('TRUE END')).dx, greaterThan(900));
+    await tester.tap(find.text('タイトルへ戻る'));
+    await tester.pump();
+    expect(finished, isTrue);
+    expect(tester.takeException(), isNull);
+  });
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mio_clock/game_progress.dart';
 import 'package:mio_clock/game_room.dart';
+import 'package:mio_clock/widgets/dialogue_panel.dart';
 
 Widget scaledRoom(GameProgress progress) => MaterialApp(
   home: Scaffold(
@@ -27,41 +28,56 @@ Widget scaledRoom(GameProgress progress) => MaterialApp(
   ),
 );
 
+Future<void> advanceDialogue(WidgetTester tester) async {
+  for (var index = 0; index < 80; index++) {
+    await tester.pump();
+    if (find.byType(DialoguePanel).evaluate().isEmpty) return;
+    await tester.tap(find.byType(DialoguePanel));
+    await tester.pump();
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('幅667相当で小さな缶と隠し棚をタップできる', (tester) async {
+  testWidgets('幅667相当でも作業台をのぞいて歯車と缶に触れる', (tester) async {
     tester.view.physicalSize = const Size(667, 375);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    final past = GameProgress(
-      era: Era.past,
-      introSeen: true,
-      metMio: true,
-      holding1926: true,
-    );
+    final past = GameProgress(era: Era.past, introSeen: true, metMio: true);
     await tester.pumpWidget(scaledRoom(past));
-    final tinSize = tester.getSize(find.byKey(const Key('hotspot-tin')));
-    expect(tinSize.width, greaterThanOrEqualTo(90));
-    await tester.tap(find.byKey(const Key('hotspot-tin')));
+    await tester.tap(find.byKey(const Key('hotspot-workbench')));
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(tester.getSize(find.byKey(const Key('scene-tin'))).width, greaterThan(60));
+    await tester.tap(find.byKey(const Key('scene-gear')));
     await tester.pump();
-    expect(past.nicheRevealed, isTrue);
+    await advanceDialogue(tester);
+    await tester.tap(find.byKey(const Key('scene-tin')));
+    await tester.pump();
+    await advanceDialogue(tester);
+    expect(past.gearInTin, isTrue);
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump();
     final future = GameProgress(
-      era: Era.future,
       introSeen: true,
       metMio: true,
-      gearSpot: GearSpot.tin,
-      nicheRevealed: true,
+      gearInTin: true,
+      inventory: {'matches'},
     );
     await tester.pumpWidget(scaledRoom(future));
-    await tester.tap(find.byKey(const Key('hotspot-niche')));
+    await tester.tap(find.byKey(const Key('item-matches')));
     await tester.pump();
-    expect(future.tinOpened2126, isTrue);
+    await tester.tap(find.byKey(const Key('hotspot-workbench')));
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.byKey(const Key('scene-tin')));
+    await tester.pump();
+    await advanceDialogue(tester);
+    expect(future.tinOpened, isTrue);
     expect(tester.takeException(), isNull);
   });
 }

@@ -3,8 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:mio_clock/game_progress.dart';
 import 'package:mio_clock/game_room.dart';
-import 'package:mio_clock/puzzles/clock_cipher.dart';
-import 'package:mio_clock/widgets/door_dial.dart';
+import 'package:mio_clock/widgets/dialogue_panel.dart';
 
 import '../test/full_playthrough_test.dart' show runWalkthrough;
 
@@ -15,7 +14,7 @@ void main() {
     await runWalkthrough(tester, onDevice: true);
   });
 
-  testWidgets('iPhoneシミュレータで扉前から真エンドへ通る', (tester) async {
+  testWidgets('iPhoneシミュレータで扉の前から結末まで通る', (tester) async {
     String? ending;
     await tester.pumpWidget(
       MaterialApp(
@@ -43,21 +42,22 @@ void main() {
       ),
     );
     await tester.tap(find.byKey(const Key('hotspot-door')));
+    await tester.pump(const Duration(milliseconds: 600));
     await tester.pump();
-    for (final glyph in encodeWord('おかえり')!) {
-      var dial = tester.widget<DoorDial>(find.byType(DoorDial));
-      dial.onSelectHand(true);
-      dial.onSetNumber(glyph.hour);
-      dial.onSelectHand(false);
-      dial.onSetNumber(glyph.minuteMark);
-      await tester.pump();
-      dial = tester.widget<DoorDial>(find.byType(DoorDial));
-      dial.onStamp();
+    await tester.pump(const Duration(milliseconds: 400));
+    for (var index = 0; index < 10; index++) {
+      if (find.byType(DialoguePanel).evaluate().isEmpty) break;
+      await tester.tap(find.byType(DialoguePanel));
       await tester.pump();
     }
-    tester.widget<DoorDial>(find.byType(DoorDial)).onSay();
+    await tester.tap(find.byKey(const Key('watch-button')));
     await tester.pump();
-    expect(ending, 'true');
+    for (var index = 0; index < 10; index++) {
+      if (find.byType(DialoguePanel).evaluate().isEmpty) break;
+      await tester.tap(find.byType(DialoguePanel));
+      await tester.pump();
+    }
+    expect(ending, 'normal');
   });
 
   testWidgets('iPhoneシミュレータでBGMを開始・停止できる', (tester) async {

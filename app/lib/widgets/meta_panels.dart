@@ -2,19 +2,20 @@ import 'package:flutter/material.dart';
 
 import '../data/story_text.dart';
 import '../game_progress.dart';
-import '../puzzles/clock_cipher.dart';
-import 'clock_glyph.dart';
 import 'paper_panel.dart';
 
 const _ink = Color(0xFF34291F);
 
-class NotebookPanel extends StatelessWidget {
-  const NotebookPanel({
+/// The letters (and the old newspaper) gathered so far, to read again.
+class LettersPanel extends StatelessWidget {
+  const LettersPanel({
     super.key,
     required this.progress,
     required this.onDocument,
     required this.onClose,
   });
+
+  static const order = ['memo1', 'memo2', 'memo3', 'memo4', 'newspaper'];
 
   final GameProgress progress;
   final ValueChanged<String> onDocument;
@@ -22,165 +23,36 @@ class NotebookPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final letters = [
+      for (final id in order)
+        if (progress.docs.contains(id)) id,
+    ];
     return PaperPanel(
-      title: '手帳',
-      width: 865,
+      title: '手紙',
+      width: 640,
       onClose: onClose,
-      child: SizedBox(
-        height: 475,
-        child: DefaultTabController(
-          length: 2,
-          child: Column(
-            children: [
-              const TabBar(
-                labelColor: _ink,
-                unselectedLabelColor: Color(0xFF8B765A),
-                indicatorColor: Color(0xFF9B633B),
-                labelStyle: TextStyle(
-                  fontSize: 23,
-                  fontWeight: FontWeight.w700,
-                ),
-                tabs: [
-                  Tab(text: 'メモ'),
-                  Tab(text: '文書'),
-                ],
-              ),
-              Expanded(child: TabBarView(children: [_notes(), _documents()])),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _notes() {
-    if (progress.notes.isEmpty) {
-      return const Center(child: Text('まだ記録はない。部屋を調べよう。'));
-    }
-    return ListView(
-      children: [
-        for (final id in progress.notes)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Container(
-              padding: const EdgeInsets.all(13),
-              decoration: const BoxDecoration(
-                color: Color(0xFFEBDBB8),
-                border: Border(
-                  left: BorderSide(color: Color(0xFFB88D59), width: 4),
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    noteText[id] ?? id,
-                    style: const TextStyle(
-                      color: _ink,
-                      fontSize: 20,
-                      height: 1.4,
+      child: letters.isEmpty
+          ? const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Text('まだ手紙はない。'),
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final id in letters)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: FilledButton(
+                      onPressed: () => onDocument(id),
+                      style: parchmentButton(),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(documentTitles[id] ?? id),
+                      ),
                     ),
                   ),
-                  if (id == 'n_cipher') ...[
-                    const SizedBox(height: 12),
-                    const Wrap(
-                      spacing: 14,
-                      runSpacing: 5,
-                      children: [
-                        Text(
-                          '1 あいうえお',
-                          style: TextStyle(color: _ink, fontSize: 18),
-                        ),
-                        Text(
-                          '2 かきくけこ',
-                          style: TextStyle(color: _ink, fontSize: 18),
-                        ),
-                        Text(
-                          '3 さしすせそ',
-                          style: TextStyle(color: _ink, fontSize: 18),
-                        ),
-                        Text(
-                          '4 たちつてと',
-                          style: TextStyle(color: _ink, fontSize: 18),
-                        ),
-                        Text(
-                          '5 なにぬねの',
-                          style: TextStyle(color: _ink, fontSize: 18),
-                        ),
-                        Text(
-                          '6 はひふへほ',
-                          style: TextStyle(color: _ink, fontSize: 18),
-                        ),
-                        Text(
-                          '7 まみむめも',
-                          style: TextStyle(color: _ink, fontSize: 18),
-                        ),
-                        Text(
-                          '8 や・ゆ・よ',
-                          style: TextStyle(color: _ink, fontSize: 18),
-                        ),
-                        Text(
-                          '9 らりるれろ',
-                          style: TextStyle(color: _ink, fontSize: 18),
-                        ),
-                        Text(
-                          '10 わ・・・を',
-                          style: TextStyle(color: _ink, fontSize: 18),
-                        ),
-                      ],
-                    ),
-                  ],
-                  if (id == 'n_example') ...[
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        for (final glyph in blackboardExampleGlyphs)
-                          Padding(
-                            padding: const EdgeInsets.only(right: 13),
-                            child: ClockGlyphView(glyph: glyph, size: 92),
-                          ),
-                      ],
-                    ),
-                  ],
-                ],
-              ),
+              ],
             ),
-          ),
-      ],
-    );
-  }
-
-  Widget _documents() {
-    if (progress.docs.isEmpty) {
-      return const Center(child: Text('まだ文書は見つかっていない。'));
-    }
-    return ListView(
-      children: [
-        for (final id in progress.docs)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: OutlinedButton.icon(
-              onPressed: () => onDocument(id),
-              icon: const Icon(Icons.description_outlined),
-              label: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(documentTitles[id] ?? id),
-              ),
-              style: ButtonStyle(
-                foregroundColor: const WidgetStatePropertyAll(_ink),
-                side: const WidgetStatePropertyAll(
-                  BorderSide(color: Color(0xFFB88D59)),
-                ),
-                textStyle: const WidgetStatePropertyAll(
-                  TextStyle(fontSize: 21),
-                ),
-                padding: const WidgetStatePropertyAll(
-                  EdgeInsets.symmetric(horizontal: 15, vertical: 14),
-                ),
-              ),
-            ),
-          ),
-      ],
     );
   }
 }
